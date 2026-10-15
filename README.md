@@ -1,6 +1,6 @@
 # BalanceKeeper
 
-**Keeps your Mac's audio balance centered — the lightest way.**
+**Keeps your Mac's audio balance centered, the lightest way.**
 
 <p align="center">
   <img src="docs/screenshot.png" width="572" alt="The BalanceKeeper settings window">
@@ -109,4 +109,4 @@ also removes the settings.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT license, see [LICENSE](LICENSE).
