@@ -1,6 +1,6 @@
 # BalanceKeeper
 
-**Keeps your Mac's audio balance centered, the lightest way.**
+**Keeps your Mac's audio balance centered.**
 
 <p align="center">
   <img src="docs/screenshot.png" width="572" alt="The BalanceKeeper settings window">
@@ -10,14 +10,12 @@ macOS sometimes shifts the left/right audio balance on its own, often after the 
 Mac is busy. One ear gets quieter and you may not notice for days. BalanceKeeper puts the balance back the moment
 it moves.
 
-## Lightest by design
+## Footprint
 
-- **About 3 MB of memory, no CPU while idle.** Measured over 60 seconds idle: 0.0 % CPU, 0 wakeups.
-- **No polling, no timers.** It sleeps until macOS reports a balance or output change.
-- **Nothing on screen.** No menu bar icon and no window running in the background. The settings window runs only
-  while you have it open.
-- **Small.** The whole app is 1.5 MB.
-- **No network, no permissions.**
+I wanted this to be the lightest fix there is, since it runs all day. The background agent doesn't poll and has no
+timers. It sleeps until macOS reports a balance or output change. It uses about 3 MB of memory, and over 60 seconds
+idle it measured 0.0 % CPU and 0 wakeups. It needs no permissions, makes no network connections and has no menu bar
+icon. The settings window only runs while it's open, and the whole app is 1.5 MB.
 
 Measured on macOS 26.7.1 with `footprint` and `top`.
 
@@ -26,7 +24,7 @@ Measured on macOS 26.7.1 with `footprint` and `top`.
 - Locks the balance to the center, or to any point you choose
 - Works on every output: built-in speakers, headphones, Bluetooth and USB audio devices, and switches with them
 - Shows the current output, its balance and how often BalanceKeeper had to correct it
-- Updates apply right away; moving the app to the Trash removes it cleanly
+- After an update the agent restarts with the new version; moving the app to the Trash removes its login item
 
 ## Requirements
 
@@ -51,9 +49,8 @@ to **Applications**. The app is signed with a Developer ID and notarized by Appl
 
 ### First run
 
-Open **BalanceKeeper** and turn on **Enable BalanceKeeper**. That's it: it needs no permissions.
-
-The settings window is only for settings: close it and BalanceKeeper keeps running in the background.
+Open **BalanceKeeper** and turn on **Enable BalanceKeeper**. There are no permissions to grant, and you can close
+the window afterwards; the agent keeps running without it.
 
 ## Settings
 
@@ -106,6 +103,14 @@ also removes the settings.
 ```sh
 /Applications/BalanceKeeper.app/Contents/MacOS/balancekeeperd --status   # prints the output and its balance
 ```
+
+## More small Mac apps
+
+- [NightKeys](https://github.com/fratayaydn/nightkeys): keyboard backlight that only comes on when you type on the
+  built-in keyboard
+- [CapsNow](https://github.com/fratayaydn/capsnow): turns off the Caps Lock delay, so quick taps register
+- [MicKeeper](https://github.com/fratayaydn/mickeeper): keeps AirPods and iPhones off the microphone, so AirPods don't
+  drop to call quality
 
 ## License
 
