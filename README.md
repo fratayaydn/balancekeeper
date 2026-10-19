@@ -114,6 +114,8 @@ To remove the settings too, use `brew uninstall --zap --cask balancekeeper` inst
 - [CapsNow](https://github.com/fratayaydn/capsnow): turns off the Caps Lock delay, so quick taps register
 - [MicKeeper](https://github.com/fratayaydn/mickeeper): keeps AirPods and iPhones off the microphone, so AirPods don't
   drop to call quality
+- [FullscreenKeeper](https://github.com/fratayaydn/fullscreenkeeper): reopens apps in full screen if you quit them in
+  full screen
 
 ## License
 
