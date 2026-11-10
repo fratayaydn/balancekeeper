@@ -152,11 +152,7 @@ final class Model: ObservableObject {
     var isEnabled: Bool { agentStatus == .enabled || agentStatus == .requiresApproval }
 
     func setAgentEnabled(_ on: Bool) {
-        do {
-            if on { try agent.register() } else { try agent.unregister() }
-        } catch {
-            NSLog("BalanceKeeper: could not \(on ? "register" : "unregister") the agent: \(error)")
-        }
+        if on { try? agent.register() } else { try? agent.unregister() }
         readAgentState()
     }
 }
