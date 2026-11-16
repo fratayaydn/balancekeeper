@@ -93,6 +93,7 @@ final class Model: ObservableObject {
     @Published var correctionCount = 0
     @Published var lastCorrection: Date?
     @Published var agentStatus = SMAppService.Status.notRegistered
+    @Published var errorMessage: String?
 
     // The app's bundle identifier is prefsDomain, so its standard defaults are the domain the agent reads.
     private let defaults = UserDefaults.standard
@@ -178,7 +179,11 @@ final class Model: ObservableObject {
     func setAgentEnabled(_ on: Bool) {
         defaults.removeObject(forKey: reregistrationPendingKey)
         defaults.synchronize()
-        if on { try? agent.register() } else { try? agent.unregister() }
+        do {
+            if on { try agent.register() } else { try agent.unregister() }
+        } catch {
+            errorMessage = "Could not \(on ? "enable" : "disable") BalanceKeeper: \(error.localizedDescription)"
+        }
         readAgentState()
     }
 }
@@ -238,6 +243,11 @@ struct ContentView: View {
         .formStyle(.grouped)
         .frame(width: 460)
         .fixedSize()
+        .alert("BalanceKeeper", isPresented: Binding(get: { model.errorMessage != nil }, set: { if !$0 { model.errorMessage = nil } })) {
+            Button("OK") { model.errorMessage = nil }
+        } message: {
+            Text(model.errorMessage ?? "")
+        }
     }
 
     private func correctionText(now: Date) -> String {

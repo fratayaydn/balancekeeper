@@ -214,20 +214,49 @@ static void unregisterLoginItem(void) {
 #endif
 }
 
-// BalanceKeeper.app was moved to the Trash or replaced by an update. An update puts a new copy at the same path
-// within moments: exit with an error so launchd starts the new agent. Otherwise the app is gone: remove the login
-// item and exit for good (a successful exit is not restarted).
-static void appMoved(void) {
+typedef NS_ENUM(NSInteger, AppMoveAction) {
+    AppMoveRestart, AppMoveKeepRunning, AppMoveRemoveAndExit
+};
+
+static AppMoveAction appMoveAction(BOOL oldPathRestored, NSString *currentBundlePath) {
+    if (oldPathRestored) return AppMoveRestart;
+    if (currentBundlePath && ![currentBundlePath.pathComponents containsObject:@".Trash"] &&
+        ![currentBundlePath.pathComponents containsObject:@".Trashes"]) return AppMoveKeepRunning;
+    return AppMoveRemoveAndExit;
+}
+
+// An update puts a new copy at the same path within moments: exit with an error so launchd starts the new agent.
+// Keep running after an ordinary move. If the app is gone or in the Trash, remove the login item and exit for good.
+static void appMoved(int fd) {
     DIAG(@"app bundle moved");
-    dispatch_source_cancel(gBundleWatch);
+    BOOL restored = NO;
     for (int i = 0; i < 10; i++) {
         sleep(1);
         struct stat st;
         if (stat(gExecutable, &st) == 0) {
-            DIAG(@"BalanceKeeper.app was updated, restarting");
-            exit(1);
+            restored = YES;
+            break;
         }
     }
+    char path[PATH_MAX];
+    struct stat st;
+    NSString *currentBundlePath = nil;
+    if (fcntl(fd, F_GETPATH, path) == 0 && fstat(fd, &st) == 0 && st.st_nlink > 0)
+        currentBundlePath = [NSString stringWithUTF8String:path];
+    switch (appMoveAction(restored, currentBundlePath)) {
+        case AppMoveRestart:
+            dispatch_source_cancel(gBundleWatch);
+            DIAG(@"BalanceKeeper.app was updated, restarting");
+            exit(1);
+        case AppMoveKeepRunning:
+            strlcpy(gExecutable, path, sizeof(gExecutable));
+            strlcat(gExecutable, "/Contents/MacOS/balancekeeperd", sizeof(gExecutable));
+            // The open descriptor keeps watching the same bundle at its new location, including later moves.
+            return;
+        case AppMoveRemoveAndExit:
+            break;
+    }
+    dispatch_source_cancel(gBundleWatch);
     DIAG(@"BalanceKeeper.app was removed, exiting");
     unregisterLoginItem();  // launchd may stop us right here
     exit(0);
@@ -252,7 +281,7 @@ static void watchAppBundle(void) {
     gBundleWatch = dispatch_source_create(DISPATCH_SOURCE_TYPE_VNODE, fd,
                                           DISPATCH_VNODE_DELETE | DISPATCH_VNODE_RENAME | DISPATCH_VNODE_REVOKE,
                                           dispatch_get_main_queue());
-    dispatch_source_set_event_handler(gBundleWatch, ^{ appMoved(); });
+    dispatch_source_set_event_handler(gBundleWatch, ^{ appMoved(fd); });
     dispatch_source_set_cancel_handler(gBundleWatch, ^{ close(fd); });
     dispatch_resume(gBundleWatch);
     DIAG(@"watching app bundle");

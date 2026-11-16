@@ -62,12 +62,17 @@ $(BUILD)/agent-build-mode: FORCE
 	@if [ ! -f $@ ] || [ "$$(cat $@)" != "$(DIAGNOSTIC_LOG)" ]; then echo "$(DIAGNOSTIC_LOG)" > $@; fi
 
 # Checks use a private notification center without changing system settings.
-test: $(BUILD)/diagnostic-tests $(BUILD)/diagnostic-release-tests $(BUILD)/balancekeeperd-diagnostic-check
+test: $(BUILD)/app-moved-tests $(BUILD)/diagnostic-tests $(BUILD)/diagnostic-release-tests $(BUILD)/balancekeeperd-diagnostic-check
+	$(BUILD)/app-moved-tests
 	$(BUILD)/diagnostic-tests
 	$(BUILD)/diagnostic-release-tests
 	sh Tests/release-logging.sh
 	$(MAKE) -B BUILD=.build/test-release SIGN_IDENTITY=- TIMESTAMP= DIAGNOSTIC_LOG=0 AGENT_DIAGNOSTIC_FLAGS= all
 	$(call CHECK_LOGGING,.build/test-release)
+
+$(BUILD)/app-moved-tests: $(AGENT_SRC) $(AGENT_HEADERS) Tests/app-moved.m
+	mkdir -p $(BUILD)
+	clang $(CFLAGS) -framework Foundation -framework CoreAudio -framework AudioToolbox Tests/app-moved.m -o $@
 
 $(BUILD)/diagnostic-tests: $(AGENT_HEADERS) Tests/diagnostic.m
 	mkdir -p $(BUILD)
