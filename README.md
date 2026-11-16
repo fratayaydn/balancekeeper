@@ -26,6 +26,8 @@ Measured on macOS 26.7.1 with `footprint` and `top`.
 - Shows the current output, its balance and how often BalanceKeeper had to correct it
 - After an update the agent restarts with the new version; moving the app to the Trash removes its login item
 
+Devices with only separate left and right channel volumes support only a centered lock point.
+
 ## Requirements
 
 - A Mac with Apple silicon

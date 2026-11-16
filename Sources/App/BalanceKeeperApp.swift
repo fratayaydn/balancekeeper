@@ -13,6 +13,7 @@ let lockPointKey = "LockPoint"
 let correctionCountKey = "CorrectionCount"
 let lastCorrectionKey = "LastCorrection"
 let registeredBuildKey = "RegisteredBuildID"
+let reregistrationPendingKey = "ReregistrationPending"
 let currentBuildID = Bundle.main.object(forInfoDictionaryKey: "BKBuildID") as? String ?? ""
 
 // MARK: - Audio output
@@ -74,6 +75,17 @@ func balanceText(_ value: Double) -> String {
 
 // MARK: - Model
 
+enum ReregistrationAction {
+    case none, storeBuildID, reregister
+}
+
+func reregistrationAction(storedBuildID: String?, currentBuildID: String, pending: Bool,
+                          agentEnabled: Bool) -> ReregistrationAction {
+    if pending { return .reregister }
+    guard storedBuildID != currentBuildID else { return .none }
+    return agentEnabled ? .reregister : .storeBuildID
+}
+
 final class Model: ObservableObject {
     @Published var lockPoint = 0.5
     @Published var outputName = ""
@@ -128,12 +140,24 @@ final class Model: ObservableObject {
     /// launchd only starts the agent build that was registered when the app is signed locally (its code signature
     /// is part of the launch constraint), so after an update the agent is registered again, if it was enabled.
     private func reregisterAfterUpdate() {
-        guard defaults.string(forKey: registeredBuildKey) != currentBuildID else { return }
-        defaults.set(currentBuildID, forKey: registeredBuildKey)
-        guard agent.status == .enabled else { return }
-        DispatchQueue.global().async { [weak self] in
+        switch reregistrationAction(storedBuildID: defaults.string(forKey: registeredBuildKey),
+                                    currentBuildID: currentBuildID,
+                                    pending: defaults.bool(forKey: reregistrationPendingKey),
+                                    agentEnabled: agent.status == .enabled) {
+        case .none: return
+        case .storeBuildID:
+            defaults.set(currentBuildID, forKey: registeredBuildKey)
+            return
+        case .reregister: break
+        }
+        defaults.set(true, forKey: reregistrationPendingKey)
+        defaults.synchronize()
+        DispatchQueue.global().async { [weak self, defaults] in
             reregisterAgent()
             if !agentIsRunning() { reregisterAgent() }  // right after an update the first pass may not take
+            defaults.set(currentBuildID, forKey: registeredBuildKey)
+            defaults.removeObject(forKey: reregistrationPendingKey)
+            defaults.synchronize()
             DispatchQueue.main.async { self?.readAgentState() }
         }
     }
@@ -152,6 +176,8 @@ final class Model: ObservableObject {
     var isEnabled: Bool { agentStatus == .enabled || agentStatus == .requiresApproval }
 
     func setAgentEnabled(_ on: Bool) {
+        defaults.removeObject(forKey: reregistrationPendingKey)
+        defaults.synchronize()
         if on { try? agent.register() } else { try? agent.unregister() }
         readAgentState()
     }
@@ -295,7 +321,10 @@ func agentIsRunning() -> Bool { launchctl(["print", agentJob]).contains("state =
 func reregisterAgent() {
     let agent = SMAppService.agent(plistName: agentPlistName)
     try? agent.unregister()
-    for _ in 0..<70 where !launchctl(["print", agentJob]).isEmpty { Thread.sleep(forTimeInterval: 0.5) }
+    for _ in 0..<70 {
+        if launchctl(["print", agentJob]).isEmpty { break }
+        Thread.sleep(forTimeInterval: 0.5)
+    }
     Thread.sleep(forTimeInterval: 1)
     try? agent.register()
     startAgentOnce()
@@ -315,6 +344,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 startAgentOnce()
                 // This build is registered now; the window must not re-register it again (see reregisterAfterUpdate).
                 UserDefaults.standard.set(currentBuildID, forKey: registeredBuildKey)
+                UserDefaults.standard.removeObject(forKey: reregistrationPendingKey)
                 UserDefaults.standard.synchronize()  // exit() would otherwise drop the unsaved value
                 exit(0)
             } catch {

@@ -47,6 +47,16 @@ diagnostic:
 
 FORCE:
 
+define CHECK_LOGGING
+	@set -e; for binary in $(1)/BalanceKeeper.app/Contents/MacOS/*; do \
+		symbols=$$(nm -u "$$binary"); \
+		if printf '%s\n' "$$symbols" | grep -E '_os_log|_NSLog'; then \
+			echo "FAIL: logging symbols in $$binary"; exit 1; \
+		fi; \
+		echo "PASS: no logging symbols in $$binary"; \
+	done
+endef
+
 $(BUILD)/agent-build-mode: FORCE
 	@mkdir -p $(BUILD)
 	@if [ ! -f $@ ] || [ "$$(cat $@)" != "$(DIAGNOSTIC_LOG)" ]; then echo "$(DIAGNOSTIC_LOG)" > $@; fi
@@ -55,14 +65,9 @@ $(BUILD)/agent-build-mode: FORCE
 test: $(BUILD)/diagnostic-tests $(BUILD)/diagnostic-release-tests $(BUILD)/balancekeeperd-diagnostic-check
 	$(BUILD)/diagnostic-tests
 	$(BUILD)/diagnostic-release-tests
+	sh Tests/release-logging.sh
 	$(MAKE) -B BUILD=.build/test-release SIGN_IDENTITY=- TIMESTAMP= DIAGNOSTIC_LOG=0 AGENT_DIAGNOSTIC_FLAGS= all
-	@set -e; for binary in .build/test-release/BalanceKeeper.app/Contents/MacOS/*; do \
-		symbols=$$(nm -u "$$binary"); \
-		if printf '%s\n' "$$symbols" | grep -E '_os_log|_NSLog'; then \
-			echo "FAIL: logging symbols in $$binary"; exit 1; \
-		fi; \
-		echo "PASS: no logging symbols in $$binary"; \
-	done
+	$(call CHECK_LOGGING,.build/test-release)
 
 $(BUILD)/diagnostic-tests: $(AGENT_HEADERS) Tests/diagnostic.m
 	mkdir -p $(BUILD)
@@ -107,6 +112,7 @@ release-app:
 	@if [ -z "$(RELEASE_IDENTITY)" ]; then echo "Set RELEASE_IDENTITY (see the Makefile)."; exit 1; fi
 	rm -rf $(RELEASE_DIR)
 	$(MAKE) BUILD=$(RELEASE_DIR) SIGN_IDENTITY="$(RELEASE_IDENTITY)" TIMESTAMP=--timestamp DIAGNOSTIC_LOG=0 AGENT_DIAGNOSTIC_FLAGS=
+	$(call CHECK_LOGGING,$(RELEASE_DIR))
 
 # Disk image only, without notarization: for checking the window layout.
 dmg: release-app

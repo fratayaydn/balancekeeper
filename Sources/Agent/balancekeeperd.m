@@ -72,7 +72,7 @@ static void loadSettings(void) {
     double d = 0.5;
     if (v && CFGetTypeID(v) == CFNumberGetTypeID()) CFNumberGetValue(v, kCFNumberDoubleType, &d);
     if (v) CFRelease(v);
-    gLockPoint = d < 0 ? 0 : d > 1 ? 1 : (Float32)d;
+    gLockPoint = !isfinite(d) ? 0.5f : d < 0 ? 0 : d > 1 ? 1 : (Float32)d;
     DIAG(@"settings lock point=%.3f", gLockPoint);
 }
 
