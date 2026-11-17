@@ -16,7 +16,7 @@ I wanted this to be the lightest fix there is, since it runs all day. The backgr
 timers. It sleeps until macOS reports a balance or output change. It uses about 3 MB of memory, and over 60 seconds
 idle it measured 0.0 % CPU and 0 wakeups. It needs no permissions, makes no network connections unless you click
 **Check for Updates** or **Update**, and has no menu bar icon. The settings window only runs while it's open, and
-the whole app is 1.5 MB.
+the whole app is 1.7 MB.
 
 Measured on macOS 26.7.1 with `footprint` and `top`.
 
