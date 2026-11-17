@@ -14,9 +14,10 @@ set -eu
 mkdir -p "$TEST_RELEASE_DIR/BalanceKeeper.app/Contents/MacOS"
 cp "$TEST_APP" "$TEST_RELEASE_DIR/BalanceKeeper.app/Contents/MacOS/BalanceKeeper"
 cp "$TEST_AGENT" "$TEST_RELEASE_DIR/BalanceKeeper.app/Contents/MacOS/balancekeeperd"
+cp "$TEST_UPDATER" "$TEST_RELEASE_DIR/BalanceKeeper.app/Contents/MacOS/balancekeeper-update"
 EOF
 chmod +x "$work/build"
-export TEST_RELEASE_DIR="$work/release" TEST_APP="$work/clean" TEST_AGENT="$work/clean"
+export TEST_RELEASE_DIR="$work/release" TEST_APP="$work/clean" TEST_AGENT="$work/clean" TEST_UPDATER="$work/clean"
 
 check_release() {
     make --no-print-directory release-app RELEASE_DIR="$TEST_RELEASE_DIR" RELEASE_IDENTITY=- \
@@ -24,14 +25,19 @@ check_release() {
 }
 
 check_release
-for binary in BalanceKeeper balancekeeperd; do
+for binary in BalanceKeeper balancekeeperd balancekeeper-update; do
     TEST_APP="$work/clean"
     TEST_AGENT="$work/clean"
-    if [ "$binary" = BalanceKeeper ]; then TEST_APP="$work/logging"; else TEST_AGENT="$work/logging"; fi
+    TEST_UPDATER="$work/clean"
+    case "$binary" in
+        BalanceKeeper) TEST_APP="$work/logging" ;;
+        balancekeeperd) TEST_AGENT="$work/logging" ;;
+        balancekeeper-update) TEST_UPDATER="$work/logging" ;;
+    esac
     if check_release; then
         echo "FAIL: release-app accepted logging symbols in $binary"
         exit 1
     fi
     grep -F "FAIL: logging symbols in $TEST_RELEASE_DIR/BalanceKeeper.app/Contents/MacOS/$binary" "$work/output"
 done
-echo "PASS: release-app checks both shipped binaries"
+echo "PASS: release-app checks all three shipped binaries"

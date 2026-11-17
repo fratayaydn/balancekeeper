@@ -35,7 +35,9 @@ DMG              := $(RELEASE_DIR)/BalanceKeeper-$(VERSION).dmg
 
 AGENT_SRC := Sources/Agent/balancekeeperd.m
 AGENT_HEADERS := Sources/Agent/DiagnosticLog.h
-APP_SRC   := Sources/App/BalanceKeeperApp.swift
+APP_SRC   := Sources/App/BalanceKeeperApp.swift Sources/App/UpdateVersion.swift
+UPDATER_SRC := Sources/Updater/Updater.m Sources/Updater/main.m
+UPDATER_HEADERS := Sources/Updater/Updater.h
 
 .PHONY: all clean install uninstall signing-identity release-app dmg release test diagnostic FORCE
 
@@ -62,13 +64,33 @@ $(BUILD)/agent-build-mode: FORCE
 	@if [ ! -f $@ ] || [ "$$(cat $@)" != "$(DIAGNOSTIC_LOG)" ]; then echo "$(DIAGNOSTIC_LOG)" > $@; fi
 
 # Checks use a private notification center without changing system settings.
-test: $(BUILD)/app-moved-tests $(BUILD)/diagnostic-tests $(BUILD)/diagnostic-release-tests $(BUILD)/balancekeeperd-diagnostic-check
+test: $(BUILD)/updater-tests $(BUILD)/updater-tools-tests $(BUILD)/updater-request-tests $(BUILD)/update-version-tests $(BUILD)/app-moved-tests $(BUILD)/diagnostic-tests $(BUILD)/diagnostic-release-tests $(BUILD)/balancekeeperd-diagnostic-check
+	$(BUILD)/updater-tests
+	$(BUILD)/updater-tools-tests
+	$(BUILD)/updater-request-tests
+	$(BUILD)/update-version-tests
 	$(BUILD)/app-moved-tests
 	$(BUILD)/diagnostic-tests
 	$(BUILD)/diagnostic-release-tests
 	sh Tests/release-logging.sh
 	$(MAKE) -B BUILD=.build/test-release SIGN_IDENTITY=- TIMESTAMP= DIAGNOSTIC_LOG=0 AGENT_DIAGNOSTIC_FLAGS= all
 	$(call CHECK_LOGGING,.build/test-release)
+
+$(BUILD)/updater-tests: $(UPDATER_SRC) $(UPDATER_HEADERS) Tests/updater.m
+	mkdir -p $(BUILD)
+	clang $(CFLAGS) -framework Foundation -framework Security Tests/updater.m Sources/Updater/Updater.m -o $@
+
+$(BUILD)/updater-tools-tests: $(UPDATER_SRC) $(UPDATER_HEADERS) Tests/updater-tools.m
+	mkdir -p $(BUILD)
+	clang $(CFLAGS) -framework Foundation -framework Security Tests/updater-tools.m -o $@
+
+$(BUILD)/updater-request-tests: $(UPDATER_SRC) $(UPDATER_HEADERS) Tests/updater-request.m
+	mkdir -p $(BUILD)
+	clang $(CFLAGS) -framework Foundation -framework Security Tests/updater-request.m -o $@
+
+$(BUILD)/update-version-tests: Sources/App/UpdateVersion.swift Tests/update-version.swift
+	mkdir -p $(BUILD)/module-cache
+	swiftc -Onone -module-cache-path $(BUILD)/module-cache -swift-version 5 -parse-as-library -target $(ARCH)-apple-macos$(MIN_OS) $^ -o $@
 
 $(BUILD)/app-moved-tests: $(AGENT_SRC) $(AGENT_HEADERS) Tests/app-moved.m
 	mkdir -p $(BUILD)
@@ -90,11 +112,12 @@ signing-identity:
 	@if [ "$(SIGN_IDENTITY)" = "Local Code Signing" ]; then ./scripts/create-signing-identity.sh "$(SIGN_IDENTITY)"; fi
 
 # signing-identity is order-only (after |): it must exist, but checking for it must not force a rebuild.
-$(APP): $(AGENT_SRC) $(AGENT_HEADERS) $(APP_SRC) Resources/Info.plist Resources/$(AGENT_ID).plist $(wildcard Resources/AppIcon.icns) $(BUILD)/agent-build-mode Makefile | signing-identity
+$(APP): $(AGENT_SRC) $(AGENT_HEADERS) $(APP_SRC) $(UPDATER_SRC) $(UPDATER_HEADERS) Resources/Info.plist Resources/$(AGENT_ID).plist $(wildcard Resources/AppIcon.icns) $(BUILD)/agent-build-mode Makefile | signing-identity
 	rm -rf $(STAGE)
 	mkdir -p $(BUILD)/module-cache $(CONTENTS)/MacOS $(CONTENTS)/Resources $(CONTENTS)/Library/LaunchAgents
 	clang $(CFLAGS) $(AGENT_DIAGNOSTIC_FLAGS) -framework Foundation -framework CoreAudio -framework AudioToolbox $(AGENT_SRC) \
 		-o $(CONTENTS)/MacOS/balancekeeperd
+	clang $(CFLAGS) -framework Foundation -framework Security $(UPDATER_SRC) -o $(CONTENTS)/MacOS/balancekeeper-update
 	swiftc -O -module-cache-path $(BUILD)/module-cache -swift-version 5 -parse-as-library -target $(ARCH)-apple-macos$(MIN_OS) \
 		$(APP_SRC) -o $(CONTENTS)/MacOS/BalanceKeeper
 	sed -e 's/VERSION/$(VERSION)/' -e "s/BUILD_ID/$$(date +%Y%m%d%H%M%S)/" Resources/Info.plist > $(CONTENTS)/Info.plist
@@ -103,6 +126,7 @@ ifeq ($(DIAGNOSTIC_LOG),1)
 endif
 	cp Resources/$(AGENT_ID).plist $(CONTENTS)/Library/LaunchAgents/
 	if [ -f Resources/AppIcon.icns ]; then cp Resources/AppIcon.icns $(CONTENTS)/Resources/; fi
+	codesign $(SIGN_FLAGS) --identifier io.github.fratayaydn.balancekeeper.update $(CONTENTS)/MacOS/balancekeeper-update
 	codesign $(SIGN_FLAGS) --identifier $(AGENT_ID) $(CONTENTS)/MacOS/balancekeeperd
 	codesign $(SIGN_FLAGS) $(STAGE)
 	rm -rf $(APP)

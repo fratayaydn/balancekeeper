@@ -14,8 +14,9 @@ it moves.
 
 I wanted this to be the lightest fix there is, since it runs all day. The background agent doesn't poll and has no
 timers. It sleeps until macOS reports a balance or output change. It uses about 3 MB of memory, and over 60 seconds
-idle it measured 0.0 % CPU and 0 wakeups. It needs no permissions, makes no network connections and has no menu bar
-icon. The settings window only runs while it's open, and the whole app is 1.5 MB.
+idle it measured 0.0 % CPU and 0 wakeups. It needs no permissions, makes no network connections unless you click
+**Check for Updates** or **Update**, and has no menu bar icon. The settings window only runs while it's open, and
+the whole app is 1.5 MB.
 
 Measured on macOS 26.7.1 with `footprint` and `top`.
 
@@ -61,6 +62,13 @@ While BalanceKeeper is on, change the balance here rather than in System Setting
 there exactly like a drift, so BalanceKeeper would put it back.
 
 Leave it in the center unless you want to compensate for your hearing or your speakers.
+
+## Updates
+
+BalanceKeeper never checks for updates by itself. **Check for Updates** in the window sends one request to
+`api.github.com` with only the app name and version. If a newer version is available, **Update** downloads and
+installs it, then reopens the app. An update is installed only when it is signed with the same Developer ID and
+notarized by Apple.
 
 ## How it works
 

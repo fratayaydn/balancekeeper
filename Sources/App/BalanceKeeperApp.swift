@@ -14,6 +14,7 @@ let correctionCountKey = "CorrectionCount"
 let lastCorrectionKey = "LastCorrection"
 let registeredBuildKey = "RegisteredBuildID"
 let reregistrationPendingKey = "ReregistrationPending"
+let currentVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Unknown"
 let currentBuildID = Bundle.main.object(forInfoDictionaryKey: "BKBuildID") as? String ?? ""
 
 // MARK: - Audio output
@@ -94,6 +95,11 @@ final class Model: ObservableObject {
     @Published var lastCorrection: Date?
     @Published var agentStatus = SMAppService.Status.notRegistered
     @Published var errorMessage: String?
+    @Published var latestVersion: String?
+    @Published var updateStatus: String?
+    @Published var updateInProgress = false
+
+    private var updateProcess: Process?
 
     // The app's bundle identifier is prefsDomain, so its standard defaults are the domain the agent reads.
     private let defaults = UserDefaults.standard
@@ -102,6 +108,7 @@ final class Model: ObservableObject {
     private lazy var outputChanged: AudioObjectPropertyListenerBlock = { [weak self] _, _ in self?.readOutput() }
 
     init() {
+        latestVersion = availableUpdate(defaults.object(forKey: "LatestVersion"), current: currentVersion)
         reregisterAfterUpdate()
         if let stored = defaults.object(forKey: lockPointKey) as? Double { lockPoint = min(max(stored, 0), 1) }
         readAgentState()
@@ -160,6 +167,59 @@ final class Model: ObservableObject {
             defaults.removeObject(forKey: reregistrationPendingKey)
             defaults.synchronize()
             DispatchQueue.main.async { self?.readAgentState() }
+        }
+    }
+
+    func runUpdate(install: Bool) {
+        guard !updateInProgress else { return }
+        updateInProgress = true
+        updateStatus = install ? "Downloading and installing update..." : "Checking for updates..."
+        let bundleURL = Bundle.main.bundleURL
+        let process = Process()
+        process.executableURL = bundleURL.appendingPathComponent("Contents/MacOS/balancekeeper-update")
+        process.arguments = [install ? "--install" : "--check"]
+        process.standardInput = FileHandle.nullDevice
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        process.terminationHandler = { [weak self] finished in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.updateProcess = nil
+                CFPreferencesAppSynchronize(prefsDomain as CFString)
+                self.latestVersion = availableUpdate(CFPreferencesCopyAppValue("LatestVersion" as CFString, prefsDomain as CFString),
+                                                     current: currentVersion) ?? self.latestVersion
+                guard finished.terminationReason == .exit && finished.terminationStatus == 0 else {
+                    self.updateInProgress = false
+                    self.updateStatus = install ? "Could not install the update. Try again." : "Could not check for updates. Try again."
+                    return
+                }
+                if install {
+                    self.updateStatus = "Restarting BalanceKeeper..."
+                    let configuration = NSWorkspace.OpenConfiguration()
+                    configuration.createsNewApplicationInstance = true
+                    NSWorkspace.shared.openApplication(at: bundleURL, configuration: configuration) { _, error in
+                        DispatchQueue.main.async {
+                            if error == nil {
+                                NSApp.terminate(nil)
+                            } else {
+                                self.updateInProgress = false
+                                self.updateStatus = "Updated. Quit and reopen BalanceKeeper."
+                            }
+                        }
+                    }
+                } else {
+                    self.updateInProgress = false
+                    self.updateStatus = self.latestVersion == nil ? "BalanceKeeper is up to date" : nil
+                }
+            }
+        }
+        updateProcess = process
+        do {
+            try process.run()
+        } catch {
+            updateProcess = nil
+            updateInProgress = false
+            updateStatus = "Could not start the updater. Try again."
         }
     }
 
@@ -236,6 +296,23 @@ struct ContentView: View {
                     // Computed when the window opens and then once a minute, not on every redraw.
                     TimelineView(.everyMinute) { context in
                         Text(correctionText(now: context.date)).foregroundStyle(.secondary)
+                    }
+                }
+            }
+            Section("Updates") {
+                LabeledContent("Version") {
+                    Text(currentVersion).foregroundStyle(.secondary)
+                    Button("Check for Updates") { model.runUpdate(install: false) }
+                        .disabled(model.updateInProgress)
+                }
+                if let status = model.updateStatus ?? model.latestVersion.map({ "Version \($0) is available" }) {
+                    HStack {
+                        Text(status).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                        Spacer(minLength: 0)
+                        if model.latestVersion != nil {
+                            Button("Update") { model.runUpdate(install: true) }
+                                .disabled(model.updateInProgress)
+                        }
                     }
                 }
             }
