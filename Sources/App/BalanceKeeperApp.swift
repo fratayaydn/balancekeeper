@@ -320,6 +320,7 @@ struct ContentView: View {
         .formStyle(.grouped)
         .frame(width: 460)
         .fixedSize()
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in model.readAgentState() }
         .alert("BalanceKeeper", isPresented: Binding(get: { model.errorMessage != nil }, set: { if !$0 { model.errorMessage = nil } })) {
             Button("OK") { model.errorMessage = nil }
         } message: {
