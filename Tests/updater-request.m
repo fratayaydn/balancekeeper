@@ -15,13 +15,6 @@ static Boolean fixtureSynchronize(CFStringRef app) {
     return true;
 }
 
-static CFPropertyListRef fixtureCopy(CFStringRef key, CFStringRef app) {
-    assert([(__bridge NSString *)app isEqual:@"io.github.fratayaydn.balancekeeper"]);
-    assert([(__bridge NSString *)key isEqual:@"LatestVersion"]);
-    id value = preferences[(__bridge NSString *)key];
-    return value ? CFRetain((__bridge CFTypeRef)value) : NULL;
-}
-
 static void fixtureSet(CFStringRef key, CFPropertyListRef value, CFStringRef app) {
     assert([(__bridge NSString *)app isEqual:@"io.github.fratayaydn.balancekeeper"]);
     assert([(__bridge NSString *)key isEqual:@"LatestVersion"]);
@@ -76,7 +69,6 @@ static int fixtureExecutablePath(char *buffer, uint32_t *size) {
 - (void)invalidateAndCancel {}
 @end
 
-#define CFPreferencesCopyAppValue fixtureCopy
 #define CFPreferencesAppSynchronize fixtureSynchronize
 #define CFPreferencesSetAppValue fixtureSet
 #define _NSGetExecutablePath fixtureExecutablePath
@@ -86,7 +78,6 @@ static int fixtureExecutablePath(char *buffer, uint32_t *size) {
 #undef _NSGetExecutablePath
 #undef CFPreferencesSetAppValue
 #undef CFPreferencesAppSynchronize
-#undef CFPreferencesCopyAppValue
 #define main updaterMain
 #import "../Sources/Updater/main.m"
 #undef main
@@ -145,9 +136,9 @@ int main(void) {
         assert(command("--install") != 0 && requests == 1 && downloads == 0);
         savedVersion = @"1.2.3";
         assert(command("--install") != 0 && downloads == 0);
-        assert([preferences[@"LatestVersion"] isEqual:@"1.2.3"]);
+        assert([preferences[@"LatestVersion"] isEqual:@"1.0.0"]);
         assert(command("--check") == 0 && downloads == 0);
-        assert([preferences[@"LatestVersion"] isEqual:@"1.2.3"]);
+        assert([preferences[@"LatestVersion"] isEqual:@"1.0.0"]);
         savedVersion = nil;
         responseStatus = 404;
         assert(command("--check") == 0 && requests == 1 && downloads == 0);

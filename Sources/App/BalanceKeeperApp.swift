@@ -194,7 +194,7 @@ final class Model: ObservableObject {
                 self.updateProcess = nil
                 CFPreferencesAppSynchronize(prefsDomain as CFString)
                 self.latestVersion = availableUpdate(CFPreferencesCopyAppValue("LatestVersion" as CFString, prefsDomain as CFString),
-                                                     current: currentVersion) ?? self.latestVersion
+                                                     current: currentVersion)
                 guard finished.terminationReason == .exit && finished.terminationStatus == 0 else {
                     self.updateInProgress = false
                     self.updateStatus = install ? "Could not install the update. Try again." : "Could not check for updates. Try again."

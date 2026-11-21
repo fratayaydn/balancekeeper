@@ -327,11 +327,7 @@ int updaterRun(BOOL install) {
         }
         NSString *version = updaterVersion(release[@"tag_name"]);
         if (!version) return 1;
-        if (!CFPreferencesAppSynchronize((__bridge CFStringRef)BundleID)) return 1;
-        NSString *saved = updaterVersion(CFBridgingRelease(CFPreferencesCopyAppValue(CFSTR("LatestVersion"), (__bridge CFStringRef)BundleID)));
-        // Keep a known newer release available if GitHub's latest release changes.
-        NSString *latest = saved && updaterCompareVersions(saved, version) == NSOrderedDescending ? saved : version;
-        CFPreferencesSetAppValue(CFSTR("LatestVersion"), (__bridge CFStringRef)latest, (__bridge CFStringRef)BundleID);
+        CFPreferencesSetAppValue(CFSTR("LatestVersion"), (__bridge CFStringRef)version, (__bridge CFStringRef)BundleID);
         if (!CFPreferencesAppSynchronize((__bridge CFStringRef)BundleID)) {
             return 1;
         }
