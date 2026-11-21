@@ -29,6 +29,10 @@ reregister() {
     sleep 2
 }
 
+TEMP=$(mktemp -d "$(dirname "$APP")/.BalanceKeeper-install.XXXXXX")
+trap 'rm -rf "$TEMP"' EXIT
+cp -R "$BUILD" "$TEMP/BalanceKeeper.app"
+
 pkill -x BalanceKeeper || true
 enabled=no
 launchctl print "$JOB" >/dev/null 2>&1 && enabled=yes
@@ -38,7 +42,7 @@ if [ -x "$CLI" ]; then
 fi
 
 rm -rf "$APP"
-cp -R "$BUILD" "$APP"
+mv "$TEMP/BalanceKeeper.app" "$APP"
 
 if [ "$enabled" = yes ]; then
     reregister
