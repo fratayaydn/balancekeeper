@@ -329,6 +329,14 @@ int main(int argc, char **argv) {
         OSStatus result = AudioObjectAddPropertyListenerBlock(kAudioObjectSystemObject, &def, gQueue,
             ^(UInt32 n, const AudioObjectPropertyAddress *a) { watchDevice(defaultOutput()); });
         if (result != noErr) DIAG(@"add default output listener result=%d", result);
+        // Exit with an error so launchd starts a fresh agent and restores all audio listeners.
+        AudioObjectPropertyAddress restart = addr(kAudioHardwarePropertyServiceRestarted, kAudioObjectPropertyScopeGlobal, kAudioObjectPropertyElementMain);
+        result = AudioObjectAddPropertyListenerBlock(kAudioObjectSystemObject, &restart, gQueue,
+            ^(UInt32 n, const AudioObjectPropertyAddress *a) {
+                DIAG(@"audio service restarted, restarting agent");
+                exit(1);
+            });
+        if (result != noErr) DIAG(@"add service restart listener result=%d", result);
         watchDevice(defaultOutput());
 
         CFRunLoopRun();  // also serves the main queue (CoreAudio listeners) and distributed notifications
