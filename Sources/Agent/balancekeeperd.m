@@ -121,8 +121,7 @@ static void enforce(void) {
         if (fabsf(p - gLockPoint) > 0.001f) {
             OSStatus result = AudioObjectSetPropertyData(d, &pan, 0, NULL, sizeof(gLockPoint), &gLockPoint);
             DIAG(@"pan action device=%u from=%.3f to=%.3f counted=%d result=%d", d, p, gLockPoint, gCountFixes, result);
-            (void)result;
-            recordFix();
+            if (result == noErr) recordFix();
         }
         return;
     }
@@ -134,8 +133,7 @@ static void enforce(void) {
         if (fabsf(b - gLockPoint) > 0.001f) {
             OSStatus result = AudioObjectSetPropertyData(d, &vb, 0, NULL, sizeof(gLockPoint), &gLockPoint);
             DIAG(@"virtual balance action device=%u from=%.3f to=%.3f counted=%d result=%d", d, b, gLockPoint, gCountFixes, result);
-            (void)result;
-            recordFix();
+            if (result == noErr) recordFix();
         }
         return;
     }
@@ -154,8 +152,7 @@ static void enforce(void) {
         OSStatus result = AudioObjectSetPropertyData(d, lv < rv ? &l : &r, 0, NULL, sizeof(v), &v);
         DIAG(@"channel action device=%u channel=%@ from=%.3f to=%.3f counted=%d result=%d",
              d, lv < rv ? @"left" : @"right", fminf(lv, rv), v, gCountFixes, result);
-        (void)result;
-        recordFix();
+        if (result == noErr) recordFix();
     }
 }
 
