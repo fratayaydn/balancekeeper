@@ -281,7 +281,7 @@ static BOOL installRelease(NSURLSession *session, NSDictionary *release, NSStrin
         // Never traverse a mounted volume when removing a temporary directory.
         if (clean && ![fm removeItemAtURL:temporary error:NULL]) clean = NO;
     }
-    return success && clean;
+    return success;
 }
 
 // A release check is one request. Asset downloads retain GitHub's normal redirects.
