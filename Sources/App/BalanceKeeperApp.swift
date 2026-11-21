@@ -100,6 +100,7 @@ final class Model: ObservableObject {
     @Published var updateInProgress = false
 
     private var updateProcess: Process?
+    private var reregistering = false
 
     // The app's bundle identifier is prefsDomain, so its standard defaults are the domain the agent reads.
     private let defaults = UserDefaults.standard
@@ -139,7 +140,7 @@ final class Model: ObservableObject {
     }
 
     func readAgentState() {
-        agentStatus = agent.status
+        if !reregistering { agentStatus = agent.status }
         defaults.synchronize()
         correctionCount = defaults.integer(forKey: correctionCountKey)
         lastCorrection = defaults.object(forKey: lastCorrectionKey) as? Date
@@ -160,6 +161,8 @@ final class Model: ObservableObject {
         }
         defaults.set(true, forKey: reregistrationPendingKey)
         defaults.synchronize()
+        agentStatus = agent.status  // shown until the sequence ends
+        reregistering = true
         DispatchQueue.global().async { [weak self, defaults] in
             var result = reregisterAgent()
             if result != .skipped && !agentIsRunning() { result = reregisterAgent() }  // right after an update the first pass may not take
@@ -169,6 +172,7 @@ final class Model: ObservableObject {
                 defaults.synchronize()
             }
             DispatchQueue.main.async {
+                self?.reregistering = false
                 if result == .failed {
                     self?.errorMessage = "Could not enable BalanceKeeper after the update. Close and reopen BalanceKeeper to try again."
                 }
@@ -244,6 +248,7 @@ final class Model: ObservableObject {
     var isEnabled: Bool { agentStatus == .enabled || agentStatus == .requiresApproval }
 
     func setAgentEnabled(_ on: Bool) {
+        reregistering = false  // the user's choice is shown at once
         defaults.removeObject(forKey: reregistrationPendingKey)
         defaults.synchronize()
         do {
