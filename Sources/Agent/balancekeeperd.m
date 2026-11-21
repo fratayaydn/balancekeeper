@@ -76,9 +76,21 @@ static void loadSettings(void) {
     DIAG(@"settings lock point=%.3f", gLockPoint);
 }
 
-// Written only when a correction happens: shows how often the drift actually occurs.
+static BOOL shouldCountFix(CFAbsoluteTime previous, CFAbsoluteTime now) {
+    return previous == 0 || now < previous || now - previous > 2.0;
+}
+
+// Count a burst of corrections once.
 static void recordFix(void) {
     if (!gCountFixes) return;
+    static CFAbsoluteTime lastCorrection = 0;
+    CFAbsoluteTime correctionTime = CFAbsoluteTimeGetCurrent();
+    BOOL countFix = shouldCountFix(lastCorrection, correctionTime);
+    lastCorrection = correctionTime;
+    if (!countFix) {
+        DIAG(@"correction count skipped");
+        return;
+    }
     CFPreferencesAppSynchronize(PREFS_DOMAIN);
     CFPropertyListRef v = CFPreferencesCopyAppValue(KEY_FIX_COUNT, PREFS_DOMAIN);
     long count = 0;
@@ -86,7 +98,7 @@ static void recordFix(void) {
     if (v) CFRelease(v);
     count++;
     CFNumberRef n = CFNumberCreate(NULL, kCFNumberLongType, &count);
-    CFDateRef now = CFDateCreate(NULL, CFAbsoluteTimeGetCurrent());
+    CFDateRef now = CFDateCreate(NULL, correctionTime);
     CFPreferencesSetAppValue(KEY_FIX_COUNT, n, PREFS_DOMAIN);
     CFPreferencesSetAppValue(KEY_LAST_FIX, now, PREFS_DOMAIN);
     CFRelease(n);

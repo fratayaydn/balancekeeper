@@ -6,6 +6,13 @@
 
 int main(void) {
     @autoreleasepool {
+        assert(shouldCountFix(0, 100));
+        assert(!shouldCountFix(100, 101));
+        assert(!shouldCountFix(100, 102));
+        assert(shouldCountFix(100, 103));
+        assert(shouldCountFix(100, 99));
+        puts("PASS: correction burst counting decisions");
+
         assert(appMoveAction(YES, nil) == AppMoveRestart);
         assert(appMoveAction(YES, @"/Users/test/.Trash/BalanceKeeper.app") == AppMoveRestart);
         assert(appMoveAction(NO, nil) == AppMoveRemoveAndExit);
