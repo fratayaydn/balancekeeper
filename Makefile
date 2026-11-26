@@ -1,6 +1,6 @@
 # BalanceKeeper: `make` builds .build/BalanceKeeper.app (hidden, so Spotlight does not list the build copy), `make install` copies it to /Applications and opens it.
 # `make dmg` builds the disk image; `make release` builds, notarizes and staples it (Developer ID required).
-VERSION  := 1.0.2
+VERSION  := 1.0.3
 BUILD    ?= .build
 APP      := $(BUILD)/BalanceKeeper.app
 STAGE    := $(BUILD)/stage/BalanceKeeper.app
