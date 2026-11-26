@@ -73,8 +73,8 @@ app inside is checked again before it replaces the old one. Updates run silently
 
 The check is one request to `api.github.com` that sends only the app name and version. With **Install updates
 automatically** off, BalanceKeeper does not check by itself. Click **Check for Updates** in the window to check,
-then **Update** to install and reopen the app. The window shows when it last checked. Homebrew installs follow
-the same settings.
+then **Update** to install and reopen the app. The window shows when it last checked. Homebrew installs use the
+same updater. The cask is marked as auto-updating, so `brew upgrade` skips it unless you add `--greedy`.
 
 ## How it works
 
