@@ -21,6 +21,7 @@
 #define KEY_FIX_COUNT                 CFSTR("CorrectionCount")
 #define KEY_LAST_FIX                  CFSTR("LastCorrection")  // date
 #define AGENT_PLIST                   @"io.github.fratayaydn.balancekeeper.agent.plist"
+#define UPDATER_PLIST                 @"io.github.fratayaydn.balancekeeper.updater.plist"
 
 // ServiceManagement is loaded only when the app is removed, so it costs no memory while running.
 @interface NSObject (SMAppService)
@@ -214,13 +215,16 @@ static void unregisterLoginItem(void) {
     }
     Class cls = NSClassFromString(@"SMAppService");
     DIAG(@"remove login item");
+    // Remove the updater first: unregistering the agent can stop this process.
+    for (NSString *plist in @[UPDATER_PLIST, AGENT_PLIST]) {
 #ifdef BALANCEKEEPER_DIAGNOSTIC_LOG
-    NSError *error = nil;
-    if (![[cls agentServiceWithPlistName:AGENT_PLIST] unregisterAndReturnError:&error])
-        DIAG(@"could not remove login item error=%ld", (long)error.code);
+        NSError *error = nil;
+        if (![[cls agentServiceWithPlistName:plist] unregisterAndReturnError:&error])
+            DIAG(@"could not remove %@ error=%ld", plist, (long)error.code);
 #else
-    [[cls agentServiceWithPlistName:AGENT_PLIST] unregisterAndReturnError:NULL];
+        [[cls agentServiceWithPlistName:plist] unregisterAndReturnError:NULL];
 #endif
+    }
 }
 
 typedef NS_ENUM(NSInteger, AppMoveAction) {

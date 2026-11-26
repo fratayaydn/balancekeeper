@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <sys/file.h>
 #include <sys/stat.h>
+#include <sys/sysctl.h>
 #include <unistd.h>
 
 static NSString *const GitHubOwner = @"fratayaydn";
@@ -52,6 +53,10 @@ BOOL updaterAssetSizeValid(id value) {
 NSString *updaterRequirement(void) {
     return [NSString stringWithFormat:@"anchor apple generic and identifier \"%@\" and certificate leaf[subject.OU] = \"%@\" and notarized",
                                      BundleID, TeamID];
+}
+
+static id preference(NSString *key) {
+    return CFBridgingRelease(CFPreferencesCopyAppValue((__bridge CFStringRef)key, (__bridge CFStringRef)BundleID));
 }
 
 // Resolve the executable rather than the working directory or an application search result.
@@ -296,7 +301,19 @@ static BOOL installRelease(NSURLSession *session, NSDictionary *release, NSStrin
 }
 @end
 
-int updaterRun(BOOL install) {
+int updaterRun(BOOL install, BOOL scheduled) {
+    CFPreferencesAppSynchronize((__bridge CFStringRef)BundleID);
+    id automatic = preference(@"AutomaticallyInstallUpdates");
+    if (scheduled && automatic != nil && ![automatic boolValue]) return 0;
+    char build[256] = {0};
+    size_t size = sizeof(build);
+    NSString *osBuild = sysctlbyname("kern.osversion", build, &size, NULL, 0) == 0 ? @(build) : nil;
+    if (scheduled) {
+        id lastCheck = preference(@"LastUpdateCheck");
+        if ([preference(@"LastUpdateCheckOSBuild") isEqual:osBuild] && [lastCheck isKindOfClass:NSDate.class] &&
+            [NSDate.date timeIntervalSinceDate:lastCheck] < 20 * 60 * 60) return 0;
+    }
+    if (!osBuild) return 1;
     NSURL *installed = runningBundle();
     NSString *current = updaterVersion(bundleInfo(installed)[@"CFBundleShortVersionString"]);
     if (!installed || !current) return 1;
@@ -304,8 +321,9 @@ int updaterRun(BOOL install) {
     int lock = open(installed.fileSystemRepresentation, O_RDONLY | O_CLOEXEC);
     if (lock < 0) return 1;
     if (flock(lock, LOCK_EX | LOCK_NB) != 0) {
+        int code = errno;
         close(lock);
-        return 1;
+        return scheduled && code == EWOULDBLOCK ? 0 : 1;
     }
     NSURLSessionConfiguration *configuration = NSURLSessionConfiguration.ephemeralSessionConfiguration;
     configuration.timeoutIntervalForRequest = 20;
@@ -327,6 +345,8 @@ int updaterRun(BOOL install) {
         }
         NSString *version = updaterVersion(release[@"tag_name"]);
         if (!version) return 1;
+        CFPreferencesSetAppValue(CFSTR("LastUpdateCheck"), (__bridge CFDateRef)NSDate.date, (__bridge CFStringRef)BundleID);
+        CFPreferencesSetAppValue(CFSTR("LastUpdateCheckOSBuild"), (__bridge CFStringRef)osBuild, (__bridge CFStringRef)BundleID);
         CFPreferencesSetAppValue(CFSTR("LatestVersion"), (__bridge CFStringRef)version, (__bridge CFStringRef)BundleID);
         if (!CFPreferencesAppSynchronize((__bridge CFStringRef)BundleID)) {
             return 1;
@@ -334,7 +354,7 @@ int updaterRun(BOOL install) {
         if (updaterCompareVersions(version, current) != NSOrderedDescending) {
             return install ? 1 : 0;
         }
-        if (!install) return 0;
+        if (!install && !scheduled) return 0;
         return installRelease(session, release, version, current, installed) ? 0 : 1;
     } @finally {
         [session invalidateAndCancel];

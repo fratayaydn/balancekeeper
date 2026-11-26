@@ -8,6 +8,6 @@ NSComparisonResult updaterCompareVersions(NSString *left, NSString *right);
 NSString *updaterAssetName(NSString *version);
 BOOL updaterAssetSizeValid(id _Nullable value);
 NSString *updaterRequirement(void);
-int updaterRun(BOOL install);
+int updaterRun(BOOL install, BOOL scheduled);
 
 NS_ASSUME_NONNULL_END

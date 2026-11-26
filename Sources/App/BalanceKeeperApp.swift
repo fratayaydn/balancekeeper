@@ -7,6 +7,7 @@ import SwiftUI
 
 let prefsDomain = "io.github.fratayaydn.balancekeeper"
 let agentPlistName = "io.github.fratayaydn.balancekeeper.agent.plist"
+let updaterPlistName = "io.github.fratayaydn.balancekeeper.updater.plist"
 let settingsChangedNotification = Notification.Name("io.github.fratayaydn.balancekeeper.SettingsChanged")
 let statusChangedNotification = Notification.Name("io.github.fratayaydn.balancekeeper.StatusChanged")
 let lockPointKey = "LockPoint"
@@ -81,10 +82,12 @@ enum ReregistrationAction {
 }
 
 func reregistrationAction(storedBuildID: String?, currentBuildID: String, pending: Bool,
-                          agentEnabled: Bool) -> ReregistrationAction {
+                          agentStatus: SMAppService.Status, updaterStatus: SMAppService.Status) -> ReregistrationAction {
     if pending { return .reregister }
-    guard storedBuildID != currentBuildID else { return .none }
-    return agentEnabled ? .reregister : .storeBuildID
+    guard storedBuildID != currentBuildID || updaterStatus == .notRegistered || updaterStatus == .notFound else {
+        return .none
+    }
+    return agentStatus == .enabled || agentStatus == .requiresApproval ? .reregister : .storeBuildID
 }
 
 final class Model: ObservableObject {
@@ -96,6 +99,9 @@ final class Model: ObservableObject {
     @Published var agentStatus = SMAppService.Status.notRegistered
     @Published var errorMessage: String?
     @Published var latestVersion: String?
+    @Published var automaticUpdates = true
+    @Published var lastUpdateCheck: Date?
+    @Published var installedVersion = currentVersion
     @Published var updateStatus: String?
     @Published var updateInProgress = false
 
@@ -109,7 +115,6 @@ final class Model: ObservableObject {
     private lazy var outputChanged: AudioObjectPropertyListenerBlock = { [weak self] _, _ in self?.readOutput() }
 
     init() {
-        latestVersion = availableUpdate(defaults.object(forKey: "LatestVersion"), current: currentVersion)
         reregisterAfterUpdate()
         if let stored = defaults.object(forKey: lockPointKey) as? Double { lockPoint = min(max(stored, 0), 1) }
         readAgentState()
@@ -144,6 +149,14 @@ final class Model: ObservableObject {
         defaults.synchronize()
         correctionCount = defaults.integer(forKey: correctionCountKey)
         lastCorrection = defaults.object(forKey: lastCorrectionKey) as? Date
+        automaticUpdates = defaults.object(forKey: "AutomaticallyInstallUpdates") == nil
+            || defaults.bool(forKey: "AutomaticallyInstallUpdates")
+        lastUpdateCheck = defaults.object(forKey: "LastUpdateCheck") as? Date
+        let data = try? Data(contentsOf: Bundle.main.bundleURL.appendingPathComponent("Contents/Info.plist"))
+        let info = data.flatMap { try? PropertyListSerialization.propertyList(from: $0, options: [], format: nil) }
+            as? [String: Any]
+        installedVersion = info?["CFBundleShortVersionString"] as? String ?? currentVersion
+        latestVersion = availableUpdate(defaults.object(forKey: "LatestVersion"), current: installedVersion)
     }
 
     /// launchd only starts the agent build that was registered when the app is signed locally (its code signature
@@ -152,7 +165,8 @@ final class Model: ObservableObject {
         switch reregistrationAction(storedBuildID: defaults.string(forKey: registeredBuildKey),
                                     currentBuildID: currentBuildID,
                                     pending: defaults.bool(forKey: reregistrationPendingKey),
-                                    agentEnabled: agent.status == .enabled) {
+                                    agentStatus: agent.status,
+                                    updaterStatus: SMAppService.agent(plistName: updaterPlistName).status) {
         case .none: return
         case .storeBuildID:
             defaults.set(currentBuildID, forKey: registeredBuildKey)
@@ -196,15 +210,13 @@ final class Model: ObservableObject {
             DispatchQueue.main.async {
                 guard let self else { return }
                 self.updateProcess = nil
-                CFPreferencesAppSynchronize(prefsDomain as CFString)
-                self.latestVersion = availableUpdate(CFPreferencesCopyAppValue("LatestVersion" as CFString, prefsDomain as CFString),
-                                                     current: currentVersion)
+                self.readAgentState()
                 guard finished.terminationReason == .exit && finished.terminationStatus == 0 else {
                     self.updateInProgress = false
                     self.updateStatus = install ? "Could not install the update. Try again." : "Could not check for updates. Try again."
                     return
                 }
-                if install {
+                if install && self.installedVersion != currentVersion {
                     self.updateStatus = "Restarting BalanceKeeper..."
                     let configuration = NSWorkspace.OpenConfiguration()
                     configuration.createsNewApplicationInstance = true
@@ -247,12 +259,25 @@ final class Model: ObservableObject {
 
     var isEnabled: Bool { agentStatus == .enabled || agentStatus == .requiresApproval }
 
+    var lastCheckedText: String {
+        guard let lastUpdateCheck else { return "last checked never" }
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .full
+        return "last checked \(formatter.localizedString(for: lastUpdateCheck, relativeTo: Date()))"
+    }
+
+    func setAutomaticUpdates(_ on: Bool) {
+        defaults.set(on, forKey: "AutomaticallyInstallUpdates")
+        defaults.synchronize()
+        automaticUpdates = on
+    }
+
     func setAgentEnabled(_ on: Bool) {
         reregistering = false  // the user's choice is shown at once
         defaults.removeObject(forKey: reregistrationPendingKey)
         defaults.synchronize()
         do {
-            if on { try agent.register() } else { try agent.unregister() }
+            try setLoginItemsEnabled(on)
         } catch {
             errorMessage = "Could not \(on ? "enable" : "disable") BalanceKeeper: \(error.localizedDescription)"
         }
@@ -312,8 +337,13 @@ struct ContentView: View {
                 }
             }
             Section("Updates") {
-                LabeledContent("Version") {
-                    Text(currentVersion).foregroundStyle(.secondary)
+                Toggle(isOn: Binding(get: { model.automaticUpdates }, set: { model.setAutomaticUpdates($0) })) {
+                    Text("Install updates automatically")
+                    Text("Only updates signed by the developer and notarized by Apple.")
+                }
+                HStack {
+                    Text("Version \(model.installedVersion), \(model.lastCheckedText)").foregroundStyle(.secondary)
+                    Spacer()
                     Button("Check for Updates") { model.runUpdate(install: false) }
                         .disabled(model.updateInProgress)
                 }
@@ -393,9 +423,25 @@ struct StatusRow: View {
     }
 }
 
-// MARK: - Login item
+// MARK: - Login items
 
 let agentJob = "gui/\(getuid())/io.github.fratayaydn.balancekeeper.agent"
+let updaterJob = "gui/\(getuid())/io.github.fratayaydn.balancekeeper.updater"
+
+// Remove the updater first, since removing the agent can terminate the background process.
+func setLoginItemsEnabled(_ enabled: Bool) throws {
+    let names = enabled ? [agentPlistName, updaterPlistName] : [updaterPlistName, agentPlistName]
+    var firstError: Error?
+    for name in names {
+        let service = SMAppService.agent(plistName: name)
+        do {
+            if enabled { try service.register() } else { try service.unregister() }
+        } catch {
+            if firstError == nil { firstError = error }
+        }
+    }
+    if let firstError { throw firstError }
+}
 
 @discardableResult
 func launchctl(_ arguments: [String]) -> String {
@@ -423,15 +469,17 @@ enum ReregistrationResult {
 /// Unregister, wait until launchd has dropped the job, register and start once: the sequence that refreshes
 /// the agent's launch constraint after an update (see scripts/install.sh).
 func reregisterAgent() -> ReregistrationResult {
-    let agent = SMAppService.agent(plistName: agentPlistName)
-    try? agent.unregister()
-    for _ in 0..<70 {
-        if launchctl(["print", agentJob]).isEmpty { break }
-        Thread.sleep(forTimeInterval: 0.5)
+    try? setLoginItemsEnabled(false)
+    for job in [updaterJob, agentJob] {
+        for _ in 0..<70 {
+            if launchctl(["print", job]).isEmpty { break }
+            Thread.sleep(forTimeInterval: 0.5)
+        }
     }
     Thread.sleep(forTimeInterval: 1)
     guard UserDefaults.standard.bool(forKey: reregistrationPendingKey) else { return .skipped }
-    try? agent.register()
+    try? setLoginItemsEnabled(true)
+    let agent = SMAppService.agent(plistName: agentPlistName)
     let success = agent.status == .enabled || agent.status == .requiresApproval
     startAgentOnce()
     Thread.sleep(forTimeInterval: 2)
@@ -442,12 +490,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillFinishLaunching(_ notification: Notification) {
         // `BalanceKeeper --unregister` / `--register` (used by the Makefile): change the login item and quit.
         if CommandLine.arguments.contains("--unregister") {
-            try? SMAppService.agent(plistName: agentPlistName).unregister()
+            try? setLoginItemsEnabled(false)
             exit(0)
         }
         if CommandLine.arguments.contains("--register") {
             do {
-                try SMAppService.agent(plistName: agentPlistName).register()
+                try setLoginItemsEnabled(true)
                 startAgentOnce()
                 // This build is registered now; the window must not re-register it again (see reregisterAfterUpdate).
                 UserDefaults.standard.set(currentBuildID, forKey: registeredBuildKey)

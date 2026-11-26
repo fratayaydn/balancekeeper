@@ -6,6 +6,7 @@ APP      := $(BUILD)/BalanceKeeper.app
 STAGE    := $(BUILD)/stage/BalanceKeeper.app
 CONTENTS := $(STAGE)/Contents
 AGENT_ID := io.github.fratayaydn.balancekeeper.agent
+UPDATER_ID := io.github.fratayaydn.balancekeeper.updater
 MIN_OS   := 13.0
 ARCH     := $(shell uname -m)
 CFLAGS   := -O2 -fobjc-arc -Wall -mmacosx-version-min=$(MIN_OS)
@@ -112,7 +113,7 @@ signing-identity:
 	@if [ "$(SIGN_IDENTITY)" = "Local Code Signing" ]; then ./scripts/create-signing-identity.sh "$(SIGN_IDENTITY)"; fi
 
 # signing-identity is order-only (after |): it must exist, but checking for it must not force a rebuild.
-$(APP): $(AGENT_SRC) $(AGENT_HEADERS) $(APP_SRC) $(UPDATER_SRC) $(UPDATER_HEADERS) Resources/Info.plist Resources/$(AGENT_ID).plist $(wildcard Resources/AppIcon.icns) $(BUILD)/agent-build-mode Makefile | signing-identity
+$(APP): $(AGENT_SRC) $(AGENT_HEADERS) $(APP_SRC) $(UPDATER_SRC) $(UPDATER_HEADERS) Resources/Info.plist Resources/$(AGENT_ID).plist Resources/$(UPDATER_ID).plist $(wildcard Resources/AppIcon.icns) $(BUILD)/agent-build-mode Makefile | signing-identity
 	rm -rf $(STAGE)
 	mkdir -p $(BUILD)/module-cache $(CONTENTS)/MacOS $(CONTENTS)/Resources $(CONTENTS)/Library/LaunchAgents
 	clang $(CFLAGS) $(AGENT_DIAGNOSTIC_FLAGS) -framework Foundation -framework CoreAudio -framework AudioToolbox $(AGENT_SRC) \
@@ -124,7 +125,7 @@ $(APP): $(AGENT_SRC) $(AGENT_HEADERS) $(APP_SRC) $(UPDATER_SRC) $(UPDATER_HEADER
 ifeq ($(DIAGNOSTIC_LOG),1)
 	/usr/libexec/PlistBuddy -c 'Set :CFBundleVersion $(VERSION)d1' $(CONTENTS)/Info.plist
 endif
-	cp Resources/$(AGENT_ID).plist $(CONTENTS)/Library/LaunchAgents/
+	cp Resources/$(AGENT_ID).plist Resources/$(UPDATER_ID).plist $(CONTENTS)/Library/LaunchAgents/
 	if [ -f Resources/AppIcon.icns ]; then cp Resources/AppIcon.icns $(CONTENTS)/Resources/; fi
 	codesign $(SIGN_FLAGS) --identifier io.github.fratayaydn.balancekeeper.update $(CONTENTS)/MacOS/balancekeeper-update
 	codesign $(SIGN_FLAGS) --identifier $(AGENT_ID) $(CONTENTS)/MacOS/balancekeeperd
@@ -153,6 +154,7 @@ release: release-app
 uninstall:
 	-pkill -x BalanceKeeper
 	-/Applications/BalanceKeeper.app/Contents/MacOS/BalanceKeeper --unregister
+	-launchctl bootout gui/$$(id -u)/$(UPDATER_ID) 2>/dev/null
 	-launchctl bootout gui/$$(id -u)/$(AGENT_ID) 2>/dev/null
 	rm -rf /Applications/BalanceKeeper.app
 	defaults delete io.github.fratayaydn.balancekeeper 2>/dev/null || true

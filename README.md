@@ -14,9 +14,10 @@ it moves.
 
 I wanted this to be the lightest fix there is, since it runs all day. The background agent doesn't poll and has no
 timers. It sleeps until macOS reports a balance or output change. It uses about 3 MB of memory, and over 60 seconds
-idle it measured 0.0 % CPU and 0 wakeups. It needs no permissions, makes no network connections unless you click
-**Check for Updates** or **Update**, and has no menu bar icon. The settings window only runs while it's open, and
-the whole app is 1.7 MB.
+idle it measured 0.0 % CPU and 0 wakeups. A separate updater runs briefly each day and at login, then exits. It
+checks only if about 20 hours have passed since the last check or macOS was updated. Scheduled checks stop while
+BalanceKeeper is off or automatic installs are off. It needs no permissions and has no menu bar icon. The settings
+window only runs while it's open, and the whole app is 1.7 MB.
 
 Measured on macOS 26.7.1 with `footprint` and `top`.
 
@@ -25,7 +26,7 @@ Measured on macOS 26.7.1 with `footprint` and `top`.
 - Locks the balance to the center, or to any point you choose
 - Works on every output: built-in speakers, headphones, Bluetooth and USB audio devices, and switches with them
 - Shows the current output, its balance and how often BalanceKeeper had to correct it
-- After an update the agent restarts with the new version; moving the app to the Trash removes its login item
+- After an update the agent restarts with the new version; moving the app to the Trash removes both login items
 
 Devices with only separate left and right channel volumes support only a centered lock point.
 
@@ -65,10 +66,15 @@ Leave it in the center unless you want to compensate for your hearing or your sp
 
 ## Updates
 
-BalanceKeeper never checks for updates by itself. **Check for Updates** in the window sends one request to
-`api.github.com` with only the app name and version. If a newer version is available, **Update** downloads and
-installs it, then reopens the app. An update is installed only when it is signed with the same Developer ID and
-notarized by Apple.
+By default, BalanceKeeper asks GitHub for the latest release each day and at login, if about 20 hours have passed
+since the last check or macOS was updated, and installs it if it's newer. An update is only installed when it's
+signed with the same Developer ID and notarized by Apple. The disk image is checked before it's opened, and the
+app inside is checked again before it replaces the old one. Updates run silently, without notifications.
+
+The check is one request to `api.github.com` that sends only the app name and version. With **Install updates
+automatically** off, BalanceKeeper does not check by itself. Click **Check for Updates** in the window to check,
+then **Update** to install and reopen the app. The window shows when it last checked. Homebrew installs follow
+the same settings.
 
 ## How it works
 
@@ -79,7 +85,7 @@ notarized by Apple.
   devices, the system's virtual balance for Bluetooth and many USB devices, or the lowered channel's volume for
   devices that only have separate left and right volumes.
 - It watches its app bundle through the kernel's event queue (no polling): when the app is replaced by an update it
-  restarts with the new version, and when the app is moved to the Trash it removes its login item and quits.
+  restarts with the new version, and when the app is moved to the Trash it removes both login items and quits.
 - `BalanceKeeper.app/Contents/MacOS/BalanceKeeper` is the SwiftUI settings window. It runs only while open.
 
 BalanceKeeper uses only public macOS APIs.
@@ -98,14 +104,14 @@ This builds `BalanceKeeper.app`, copies it to `/Applications` and opens it. To u
 again.
 
 Local builds are signed with a self-signed certificate that `scripts/create-signing-identity.sh` creates on the
-first build, so the login item keeps working across rebuilds; `scripts/install.sh` re-registers it after each
+first build, so the login items keep working across rebuilds; `scripts/install.sh` re-registers both after each
 update. To sign with your own Apple Developer ID instead:
 `make install SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)"`.
 
 ## Uninstall
 
 Move **BalanceKeeper** from Applications to the Trash (or `brew uninstall --cask balancekeeper`). The background
-agent notices, removes its login item and quits. Your settings are kept in case you install it again.
+agent notices, removes both login items and quits. Your settings are kept in case you install it again.
 
 To remove the settings too, use `brew uninstall --zap --cask balancekeeper` instead, or run
 `defaults delete io.github.fratayaydn.balancekeeper` after moving the app to the Trash. If you built it from source,
